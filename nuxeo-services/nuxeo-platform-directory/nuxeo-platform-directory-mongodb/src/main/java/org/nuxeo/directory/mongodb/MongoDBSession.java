@@ -100,8 +100,12 @@ public class MongoDBSession extends BaseSession {
 
     @Override
     protected DocumentModel createEntryWithoutReferences(Map<String, Object> fieldMap) {
+        // Make a defensive copy of fieldMap
+        Map<String, Object> fieldMapCopy = new HashMap<>();
+        fieldMap.entrySet().forEach(e -> fieldMapCopy.put(e.getKey(), e.getValue()));
+
         // Filter out reference fields for creation as we keep it in a different collection
-        Map<String, Object> newDocMap = fieldMap.entrySet()
+        Map<String, Object> newDocMap = fieldMapCopy.entrySet()
                                                 .stream()
                                                 .filter(entry -> getDirectory().getReferences(entry.getKey()) == null)
                                                 .collect(HashMap::new, (m, v) -> m.put(v.getKey(), v.getValue()),
@@ -115,11 +119,11 @@ public class MongoDBSession extends BaseSession {
             FindOneAndUpdateOptions options = new FindOneAndUpdateOptions().returnDocument(ReturnDocument.AFTER);
             Long longId = getCollection(countersCollectionName).findOneAndUpdate(filter, update, options)
                                                                .getLong(MONGODB_SEQ);
-            fieldMap.put(idFieldName, longId);
+            fieldMapCopy.put(idFieldName, longId);
             newDocMap.put(idFieldName, longId);
             id = String.valueOf(longId);
         } else {
-            id = String.valueOf(fieldMap.get(idFieldName));
+            id = String.valueOf(fieldMapCopy.get(idFieldName));
             if (hasEntry(id)) {
                 throw new DirectoryException(String.format("Entry with id %s already exists", id));
             }
@@ -165,7 +169,7 @@ public class MongoDBSession extends BaseSession {
         } catch (MongoWriteException e) {
             throw new DirectoryException(e);
         }
-        return createEntryModel(null, schemaName, id, fieldMap, isReadOnly());
+        return createEntryModel(null, schemaName, id, fieldMapCopy, isReadOnly());
     }
 
     @Override

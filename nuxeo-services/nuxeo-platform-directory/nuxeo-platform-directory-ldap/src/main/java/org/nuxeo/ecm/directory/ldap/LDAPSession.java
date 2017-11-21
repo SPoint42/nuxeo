@@ -145,10 +145,14 @@ public class LDAPSession extends BaseSession {
 
     @Override
     protected DocumentModel createEntryWithoutReferences(Map<String, Object> fieldMap) {
+        // Make a defensive copy of fieldMap
+        Map<String, Object> fieldMapCopy = new HashMap<>();
+        fieldMap.entrySet().forEach(e -> fieldMapCopy.put(e.getKey(), e.getValue()));
+
         LDAPDirectoryDescriptor descriptor = getDirectory().getDescriptor();
         List<String> referenceFieldList = new LinkedList<>();
         try {
-            String dn = String.format("%s=%s,%s", rdnAttribute, fieldMap.get(rdnField), descriptor.getCreationBaseDn());
+            String dn = String.format("%s=%s,%s", rdnAttribute, fieldMapCopy.get(rdnField), descriptor.getCreationBaseDn());
             Attributes attrs = new BasicAttributes();
             Attribute attr;
 
@@ -168,11 +172,11 @@ public class LDAPSession extends BaseSession {
                 attrs.put(attr);
             }
 
-            for (String fieldId : fieldMap.keySet()) {
+            for (String fieldId : fieldMapCopy.keySet()) {
                 String backendFieldId = getDirectory().getFieldMapper().getBackendField(fieldId);
                 if (fieldId.equals(getPasswordField())) {
                     attr = new BasicAttribute(backendFieldId);
-                    String password = (String) fieldMap.get(fieldId);
+                    String password = (String) fieldMapCopy.get(fieldId);
                     password = PasswordHelper.hashPassword(password, passwordHashAlgorithm);
                     attr.add(password);
                     attrs.put(attr);
@@ -193,7 +197,7 @@ public class LDAPSession extends BaseSession {
                     // ignore special DN field
                     log.warn(String.format("field %s is mapped to read only DN field: ignored", fieldId));
                 } else {
-                    Object value = fieldMap.get(fieldId);
+                    Object value = fieldMapCopy.get(fieldId);
                     if ((value != null) && !value.equals("") && !Collections.emptyList().equals(value)) {
                         attrs.put(getAttributeValue(fieldId, value));
                     }
@@ -210,7 +214,7 @@ public class LDAPSession extends BaseSession {
                 }
                 String idField = getIdField();
                 log.debug(String.format("LDAPSession.createEntry(%s=%s): LDAP bind dn='%s' attrs='%s' [%s]", idField,
-                        fieldMap.get(idField), dn, logAttrs, this));
+                        fieldMapCopy.get(idField), dn, logAttrs, this));
             }
             getContext().bind(dn, null, attrs);
 
@@ -219,14 +223,14 @@ public class LDAPSession extends BaseSession {
             if (getDirectory().getSchemaFieldMap().containsKey(dnFieldName)) {
                 // add the DN special attribute to the fieldmap of the new
                 // entry
-                fieldMap.put(dnFieldName, dn);
+                fieldMapCopy.put(dnFieldName, dn);
             }
         } catch (NamingException e) {
             handleException(e, "createEntry failed");
             return null;
         }
 
-        return fieldMapToDocumentModel(fieldMap);
+        return fieldMapToDocumentModel(fieldMapCopy);
     }
 
     @Override

@@ -711,6 +711,10 @@ public class SQLSession extends BaseSession {
 
     @Override
     protected DocumentModel createEntryWithoutReferences(Map<String, Object> fieldMap) {
+        // Make a defensive copy of fieldMap
+        Map<String, Object> fieldMapCopy = new HashMap<>();
+        fieldMap.entrySet().forEach(e -> fieldMapCopy.put(e.getKey(), e.getValue()));
+
         Map<String, Field> schemaFieldMap = directory.getSchemaFieldMap();
         Field schemaIdField = schemaFieldMap.get(getIdField());
 
@@ -718,10 +722,10 @@ public class SQLSession extends BaseSession {
 
         acquireConnection();
         if (autoincrementId) {
-            fieldMap.remove(idFieldName);
+            fieldMapCopy.remove(idFieldName);
         } else {
             // check id that was given
-            Object rawId = fieldMap.get(idFieldName);
+            Object rawId = fieldMapCopy.get(idFieldName);
             if (rawId == null) {
                 throw new DirectoryException("Missing id");
             }
@@ -733,9 +737,9 @@ public class SQLSession extends BaseSession {
             if (isMultiTenant()) {
                 String tenantId = getCurrentTenantId();
                 if (!StringUtils.isBlank(tenantId)) {
-                    fieldMap.put(TENANT_ID_FIELD, tenantId);
+                    fieldMapCopy.put(TENANT_ID_FIELD, tenantId);
                     if (computeMultiTenantId) {
-                        fieldMap.put(idFieldName, computeMultiTenantDirectoryId(tenantId, id));
+                        fieldMapCopy.put(idFieldName, computeMultiTenantDirectoryId(tenantId, id));
                     }
                 }
             }
@@ -750,10 +754,10 @@ public class SQLSession extends BaseSession {
             }
             String prefixedName = schemaFieldMap.get(column.getKey()).getName().getPrefixedName();
 
-            if (!fieldMap.containsKey(prefixedName)) {
+            if (!fieldMapCopy.containsKey(prefixedName)) {
                 Field prefixedField = schemaFieldMap.get(prefixedName);
                 if (prefixedField != null && prefixedField.getDefaultValue() != null) {
-                    fieldMap.put(prefixedName, prefixedField.getDefaultValue());
+                    fieldMapCopy.put(prefixedName, prefixedField.getDefaultValue());
                 } else {
                     i.remove();
                 }
@@ -771,7 +775,7 @@ public class SQLSession extends BaseSession {
             List<Serializable> values = new ArrayList<>(columnList.size());
             for (Column column : columnList) {
                 String prefixField = schemaFieldMap.get(column.getKey()).getName().getPrefixedName();
-                Object value = fieldMap.get(prefixField);
+                Object value = fieldMapCopy.get(prefixField);
                 Serializable v;
                 if (HIDE_PASSWORD_IN_LOGS && column.getKey().equals(getPasswordField())) {
                     v = "********"; // hide password in logs
@@ -795,7 +799,7 @@ public class SQLSession extends BaseSession {
             int index = 1;
             for (Column column : columnList) {
                 String prefixField = schemaFieldMap.get(column.getKey()).getName().getPrefixedName();
-                Object value = fieldMap.get(prefixField);
+                Object value = fieldMapCopy.get(prefixField);
                 setFieldValue(ps, index, column, value);
                 index++;
             }
@@ -818,10 +822,10 @@ public class SQLSession extends BaseSession {
                     logger.logResultSet(rs, Collections.singletonList(column));
                 }
                 Serializable rawId = column.getFromResultSet(rs, 1);
-                fieldMap.put(idFieldName, rawId);
+                fieldMapCopy.put(idFieldName, rawId);
                 rs.close();
             }
-            entry = fieldMapToDocumentModel(fieldMap);
+            entry = fieldMapToDocumentModel(fieldMapCopy);
         } catch (SQLException e) {
             checkConcurrentUpdate(e);
             throw new DirectoryException("createEntry failed", e);
